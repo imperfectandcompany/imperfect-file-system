@@ -1,8 +1,51 @@
 # Imperfect File System Documentation
 
-## Overview
+## Introduction
 
-This documentation outlines our internal file system, designed to manage and share documents easily within our team. Our file system is integrated with our file server, allowing seamless file uploads, updates, and retrieval. Files are stored in a structured manner, supporting versioning and logging of all operations to ensure traceability and management.
+The `Imperfect File Manager` represents an evolution from the initial MVP, incorporating more sophisticated features, improved user experience, and a robust backend integration. This web-based file management system is designed to efficiently handle media files and folders with enhanced functionality and user interface.
+
+## Features
+
+- **Enhanced User Interface**: Utilizes TailwindCSS for styling and provides a responsive layout suitable for both desktop and mobile use.
+- **Dynamic Sidebar**: Features a collapsible sidebar for navigation between different folders and sections like Documents, Deleted items, and Logs.
+- **Contextual Menu**: Right-click context menus are available, providing quick access to common file operations such as open, rename, delete, and more.
+- **Dark Mode Toggle**: Users can switch between light and dark themes for better accessibility and personal preference.
+- **Drag and Drop Uploads**: Supports dragging and dropping files directly into folders, streamlining the upload process.
+- **Responsive Table**: A sortable table displays file details such as name, size, type, and modification date, with click-to-sort headers.
+
+- ### React Components
+
+The application is built using React hooks. Key functionalities include:
+- **State Management**: Uses React's useState to handle states like files, selected file, context menu visibility, and more.
+- **Effect Hooks**: React's useEffect is used for fetching initial data, handling resize events for responsive behaviors, and other side effects.
+- **Event Handling**: Functions are defined for handling file selections, sorting, context menu operations, and drag-and-drop actions.
+
+### CSS Customization
+
+The application defines a set of CSS custom properties (variables) that allow easy theming and adjustments to the UI elements like colors and backgrounds.
+
+### Security
+
+Authentication is handled via token-based headers in fetch requests to ensure secure access to the backend API.
+
+## Getting Started
+
+To access the `Imperfect File Manager`:
+1. Ensure you have a modern browser that supports ES6+.
+2. Visit https://files.imperfectandcompany.com/.
+3. Login with your Imperfect Account
+  - NOTE: Use your Imperfect Gamers account details until we move to Imperfect Identity to support different tenants for external businesses, our own internal products, and customers.
+5. The application will connect to the backend via predefined API routes.
+
+## API Integration
+
+The application interacts with the backend through several endpoints, handling different aspects of file and folder management:
+- **Fetch Top-Level Folders and Media**: GET request to `/media/top-level`.
+- **Fetch Folder Contents**: GET request to `/media/folder/fetch/:folderId`.
+- **Upload Files**: POST request to `/media/upload` with support for drag-and-drop.
+- **File and Folder Operations**: Contextual actions are performed via appropriate API calls, ensuring real-time data integrity and responsiveness.
+
+This section of the documentation outlines our internal file system API, designed to manage and share documents easily within our team. Our file system is integrated with our file server, allowing seamless file uploads, updates, and retrieval. Files are stored in a structured manner, supporting versioning and logging of all operations to ensure traceability and management.
 
 When a media file is uploaded through the API, it is first validated and then stored in a designated directory on the file server. Metadata about the file, including its version and location, is stored in the database. This allows for efficient retrieval and management of files while ensuring data consistency and security.
 
