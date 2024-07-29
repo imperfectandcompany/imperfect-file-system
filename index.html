@@ -235,6 +235,8 @@
         <!-- Context menu items will be dynamically inserted here -->
     </div>
     <script type="text/babel">
+const CDN_BASE_URL = "https://cdn.imperfectgamers.org";
+
 const App = () => {
     const [files, setFiles] = React.useState({});
     const [sortConfig, setSortConfig] = React.useState({ key: 'name', direction: 'ascending' });
@@ -271,7 +273,8 @@ const App = () => {
                     size: `${media.filesize} bytes`,
                     type: media.filetype,
                     modified: new Date(media.created_at).toLocaleString(),
-                    icon: media.filetype.includes('image') ? 'fa-image' : 'fa-file-alt'
+                    icon: media.filetype.includes('image') ? 'fa-image' : 'fa-file-alt',
+                    filepath: media.filepath
                 }));
 
                 const processedData = {
@@ -320,7 +323,8 @@ const fetchFolderContents = async (folderId) => {
                 size: `${file.filesize} bytes`,
                 type: file.filetype,
                 modified: new Date(file.created_at).toLocaleString(),
-                icon: file.filetype.includes('image') ? 'fa-image' : 'fa-file-alt'
+                icon: file.filetype.includes('image') ? 'fa-image' : 'fa-file-alt',
+                filepath: file.filepath
             }));
             return [...folders, ...media];
         } else {
@@ -403,9 +407,19 @@ const fetchFolderContents = async (folderId) => {
         if (index !== undefined) {
             const file = sortedFiles[index];
             if (file.type === 'Folder') {
-                items = ['Open', 'Rename', activeFolder === 'Deleted' ? 'Restore' : 'Delete'];
-            } else if (file.type.includes('Image')) {
-                items = ['Preview', 'Download', 'Rename', 'Copy Link', activeFolder === 'Deleted' ? 'Restore' : 'Delete'];
+                items = [
+                    { label: 'Open', action: () => { handleRowClick(index); setContextMenu({ visible: false, x: 0, y: 0, items: [] }); } },
+                    'Rename',
+                    activeFolder === 'Deleted' ? 'Restore' : 'Delete'
+                ];
+            } else if (file.type.includes('Image') || file.type.includes('SVG') || file.type.includes('JPEG') || file.type.includes('JPG') || file.type.includes('GIF') || file.type.includes('ICO') || file.type.includes('PNG')) {
+                items = [
+                    'Preview',
+                    { label: 'Download', action: () => downloadMedia(file.filepath) },
+                    'Rename',
+                    { label: 'Copy Link', action: () => copyLinkToClipboard(getCdnUrl(file.filepath)) },
+                    activeFolder === 'Deleted' ? 'Restore' : 'Delete'
+                ];
             } else {
                 items = ['Open', 'Download', 'Rename', activeFolder === 'Deleted' ? 'Restore' : 'Delete'];
             }
@@ -498,6 +512,35 @@ const fetchFolderContents = async (folderId) => {
         }
     }, [darkMode]);
 
+    const getCdnUrl = (filepath) => {
+        const internalPathSegment = "/usr/www/igfastdl/imperfectandcompany-cdn";
+        return `${CDN_BASE_URL}${filepath.replace(internalPathSegment, "")}`;
+    };
+
+    const copyLinkToClipboard = (url) => {
+        navigator.clipboard.writeText(url).then(() => {
+            alert('Link copied to clipboard!');
+        }, (err) => {
+            console.error('Failed to copy link: ', err);
+        });
+    };
+
+const downloadMedia = (filepath) => {
+    if (!filepath) {
+        console.error('Filepath is missing');
+        return;
+    }
+    const url = getCdnUrl(filepath);
+    console.log('Download URL:', url);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = url.split('/').pop(); // Suggests a filename to save as
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+};
+
+
     const renderEmptyState = (folder) => {
         return (
             <div className="empty-state">
@@ -561,7 +604,6 @@ const fetchFolderContents = async (folderId) => {
             if (data.status === 'success') {
                 // Refresh the folder contents
                 if (folderId) {
-
                     const newChildren = await fetchFolderContents(folderId);
                     const updatedFiles = { ...files };
                     const folderName = currentPath[currentPath.length - 1];
@@ -578,9 +620,6 @@ const fetchFolderContents = async (folderId) => {
             console.error('Failed to upload file:', error);
         }
     };
-
-
-
 
     return (
         <div className="window" onDragOver={handleDragOver} onDrop={handleDrop}>
@@ -640,7 +679,7 @@ const fetchFolderContents = async (folderId) => {
             {contextMenu.visible && (
                 <div className="context-menu" style={{ top: contextMenu.y, left: contextMenu.x, display: 'block'}} onContextMenu={(e) => e.preventDefault()}>
                     {contextMenu.items.map((item, index) => (
-                        <div key={index} className="context-menu-item">{item}</div>
+                        <div key={index} className="context-menu-item" onClick={() => { if (typeof item.action === 'function') { item.action(); setContextMenu({ visible: false, x: 0, y: 0, items: [] }); } }}>{item.label || item}</div>
                     ))}
                 </div>
             )}
