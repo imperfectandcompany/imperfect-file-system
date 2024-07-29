@@ -26,6 +26,12 @@
             --context-menu-background-color: #ffffff;
             --context-menu-border-color: #d0d0d0;
             --context-menu-item-hover-background-color: #e0e0e0;
+            --input-background-color: #ffffff;
+            --input-border-color: #8a8886;
+            --input-focus-border-color: #323130;
+            --input-placeholder-color: #a19f9d;
+            --scrollbar-thumb-color: #b0b0b0;
+            --scrollbar-track-color: #e0e0e0;
         }
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -59,14 +65,34 @@
             padding: 16px;
             overflow-y: auto;
             transition: transform 0.3s ease-in-out;
+            scrollbar-width: thin;
+            scrollbar-color: var(--scrollbar-thumb-color) var(--scrollbar-track-color);
+            display: flex;
+            flex-direction: column;
+        }
+        .sidebar::-webkit-scrollbar, .content::-webkit-scrollbar {
+            width: 12px;
+        }
+        .sidebar::-webkit-scrollbar-thumb, .content::-webkit-scrollbar-thumb {
+            background-color: var(--scrollbar-thumb-color);
+        }
+        .sidebar::-webkit-scrollbar-track, .content::-webkit-scrollbar-track {
+            background-color: var(--scrollbar-track-color);
         }
         .sidebar.collapsed {
             transform: translateX(-100%);
+        }
+        .header {
+            font-size: 18px;
+            font-weight: bold;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--context-menu-border-color);
         }
         .sidebar .section-title {
             font-size: 14px;
             color: var(--section-title-color);
             margin-bottom: 16px;
+            margin-top: 16px;
         }
         .sidebar .folder {
             padding: 8px 16px;
@@ -83,9 +109,14 @@
             border-radius: 4px;
         }
         .content {
-            padding: 16px;
             flex-grow: 1;
             overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: var(--scrollbar-thumb-color) var(--scrollbar-track-color);
+        }
+        .table-container {
+            height: 100%;
+            overflow: auto;
         }
         .content table {
             width: 100%;
@@ -100,6 +131,9 @@
         .content th {
             background-color: var(--table-header-background-color);
             cursor: pointer;
+            position: sticky;
+            top: 0;
+            z-index: 1;
         }
         .content th:hover {
             background-color: var(--table-header-hover-background-color);
@@ -122,6 +156,9 @@
             text-align: right;
             font-size: 14px;
             color: var(--section-title-color);
+            position: relative;
+            bottom: 0;
+            width: 100%;
         }
         .context-menu {
             position: absolute;
@@ -197,6 +234,7 @@
             padding: 8px 16px;
             background-color: var(--window-background-color);
             border-bottom: 1px solid var(--context-menu-border-color);
+            height: 48px;
         }
         .navigation-button {
             cursor: pointer;
@@ -227,6 +265,27 @@
                 display: block;
             }
         }
+        /* New Folder Input Styles */
+        .new-folder-input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid var(--input-border-color);
+            border-radius: 2px;
+            font-size: 14px;
+            color: var(--text-color);
+            background-color: var(--input-background-color);
+            transition: border-color 0.2s;
+        }
+        .new-folder-input:focus {
+            outline: none;
+            border-color: var(--input-focus-border-color);
+        }
+        .new-folder-input::placeholder {
+            color: var(--input-placeholder-color);
+        }
+        .sort-indicator {
+            margin-left: 4px;
+        }
     </style>
 </head>
 <body>
@@ -235,559 +294,539 @@
         <!-- Context menu items will be dynamically inserted here -->
     </div>
     <script type="text/babel">
-const CDN_BASE_URL = "https://cdn.imperfectgamers.org";
+        const CDN_BASE_URL = "https://cdn.imperfectgamers.org";
 
-const App = () => {
-    const [files, setFiles] = React.useState({});
-    const [sortConfig, setSortConfig] = React.useState({ key: 'name', direction: 'ascending' });
-    const [selectedFile, setSelectedFile] = React.useState(null);
-    const [contextMenu, setContextMenu] = React.useState({ visible: false, x: 0, y: 0, items: [] });
-    const [darkMode, setDarkMode] = React.useState(true);
-    const [activeFolder, setActiveFolder] = React.useState('Documents');
-    const [isMobile, setIsMobile] = React.useState(window.innerWidth <= 767);
-    const [sidebarCollapsed, setSidebarCollapsed] = React.useState(isMobile);
-    const [currentPath, setCurrentPath] = React.useState(['Documents']);
-    const [creatingFolder, setCreatingFolder] = React.useState(false);
-    const [isCreatingFolder, setIsCreatingFolder] = React.useState(false);
-    const [newFolderName, setNewFolderName] = React.useState('');
+        const App = () => {
+            const [files, setFiles] = React.useState({});
+            const [sortConfig, setSortConfig] = React.useState({ key: 'name', direction: 'ascending' });
+            const [selectedFile, setSelectedFile] = React.useState(null);
+            const [contextMenu, setContextMenu] = React.useState({ visible: false, x: 0, y: 0, items: [] });
+            const [darkMode, setDarkMode] = React.useState(true);
+            const [activeFolder, setActiveFolder] = React.useState('Documents');
+            const [isMobile, setIsMobile] = React.useState(window.innerWidth <= 767);
+            const [sidebarCollapsed, setSidebarCollapsed] = React.useState(isMobile);
+            const [currentPath, setCurrentPath] = React.useState(['Documents']);
+            const [isCreatingFolder, setIsCreatingFolder] = React.useState(false);
+            const [newFolderName, setNewFolderName] = React.useState('');
 
-    const fetchTopLevelFoldersAndMedia = async () => {
-        try {
-            const response = await fetch('https://api.imperfectgamers.org/media/top-level', {
-                method: 'GET',
-                headers: {
-                    'Authorization': 'eb9fe2c075e77ef69f95276858340813249fefa81cedb86ebb21757d336b8bcb1837200c830fc652e7edc9d3847d7d9f493704f16675c83aa7879613f34537ce'
+            const fetchTopLevelFoldersAndMedia = async () => {
+                try {
+                    const response = await fetch('https://api.imperfectgamers.org/media/top-level', {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': 'eb9fe2c075e77ef69f95276858340813249fefa81cedb86ebb21757d336b8bcb1837200c830fc652e7edc9d3847d7d9f493704f16675c83aa7879613f34537ce'
+                        }
+                    });
+                    const data = await response.json();
+                    if (data.status === 'success') {
+                        const folders = data.folders.map(folder => ({
+                            id: folder.folder_id,
+                            name: folder.name,
+                            size: '1 item',
+                            type: 'Folder',
+                            modified: new Date(folder.updated_at).toLocaleString(),
+                            icon: 'fa-folder',
+                            children: []
+                        }));
+
+                        const rootMedia = data.root_media.map(media => ({
+                            name: media.filename,
+                            size: `${media.filesize} bytes`,
+                            type: media.filetype,
+                            modified: new Date(media.created_at).toLocaleString(),
+                            icon: media.filetype.includes('image') ? 'fa-image' : 'fa-file-alt',
+                            filepath: media.filepath
+                        }));
+
+                        const processedData = {
+                            'Documents': [...folders, ...rootMedia],
+                            'Deleted': [],
+                            'Logs': []
+                        };
+
+                        setFiles(processedData);
+                        setActiveFolder('Documents');
+                    } else {
+                        console.error(data.message);
+                    }
+                } catch (error) {
+                    console.error('Failed to fetch top-level folders and media:', error);
                 }
-            });
-            const data = await response.json();
-            if (data.status === 'success') {
-                const folders = data.folders.map(folder => ({
-                    id: folder.folder_id, // Assuming the API response includes `folder_id`
-                    name: folder.name,
-                    size: '1 item',
-                    type: 'Folder',
-                    modified: new Date(folder.updated_at).toLocaleString(),
-                    icon: 'fa-folder',
-                    children: []
-                }));
-
-                const rootMedia = data.root_media.map(media => ({
-                    name: media.filename,
-                    size: `${media.filesize} bytes`,
-                    type: media.filetype,
-                    modified: new Date(media.created_at).toLocaleString(),
-                    icon: media.filetype.includes('image') ? 'fa-image' : 'fa-file-alt',
-                    filepath: media.filepath
-                }));
-
-                const processedData = {
-                    'Documents': [...folders, ...rootMedia],
-                    'Deleted': [],
-                    'Logs': []
-                };
-
-                setFiles(processedData);
-                setActiveFolder('Documents');
-            } else {
-                console.error(data.message);
-            }
-        } catch (error) {
-            console.error('Failed to fetch top-level folders and media:', error);
-        }
-    };
-
-const fetchFolderContents = async (folderId) => {
-    if (isNaN(folderId)) {
-        console.error('Invalid folder ID:', folderId);
-        return [];
-    }
-    
-    try {
-        const url = `https://api.imperfectgamers.org/media/folder/fetch/${encodeURIComponent(folderId)}`;
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-                'Authorization': 'eb9fe2c075e77ef69f95276858340813249fefa81cedb86ebb21757d336b8bcb1837200c830fc652e7edc9d3847d7d9f493704f16675c83aa7879613f34537ce'
-            }
-        });
-        const data = await response.json();
-        if (data.status === 'success') {
-            const folders = data.folders.map(folder => ({
-                id: folder.folder_id,
-                name: folder.name,
-                size: '1 item',
-                type: 'Folder',
-                modified: new Date(folder.updated_at).toLocaleString(),
-                icon: 'fa-folder',
-                children: []
-            }));
-            const media = data.media.map(file => ({
-                name: file.filename,
-                size: `${file.filesize} bytes`,
-                type: file.filetype,
-                modified: new Date(file.created_at).toLocaleString(),
-                icon: file.filetype.includes('image') ? 'fa-image' : 'fa-file-alt',
-                filepath: file.filepath
-            }));
-            return [...folders, ...media];
-        } else {
-            console.error('Error fetching folder contents:', data.message);
-            return [];
-        }
-    } catch (error) {
-        console.error('Failed to fetch folder contents:', error);
-        return [];
-    }
-};
-
-
-    React.useEffect(() => {
-        fetchTopLevelFoldersAndMedia();
-    }, []);
-
-    const checkMobile = () => {
-        setIsMobile(window.innerWidth <= 767);
-        setSidebarCollapsed(window.innerWidth <= 767);
-    };
-
-    React.useEffect(() => {
-        window.addEventListener('resize', checkMobile);
-        return () => window.removeEventListener('resize', checkMobile);
-    }, []);
-
-    const sortedFiles = React.useMemo(() => {
-        let path = files;
-        currentPath.forEach((step, index) => {
-            if (index === 0) {
-                path = path[step] || [];
-            } else {
-                path = path.find(item => item.name === step)?.children || [];
-            }
-        });
-        let sortableFiles = Array.isArray(path) ? [...path] : [];
-        sortableFiles.sort((a, b) => {
-            if (a[sortConfig.key] < b[sortConfig.key]) {
-                return sortConfig.direction === 'ascending' ? -1 : 1;
-            }
-            if (a[sortConfig.key] > b[sortConfig.key]) {
-                return sortConfig.direction === 'ascending' ? 1 : -1;
-            }
-            return 0;
-        });
-        return sortableFiles;
-    }, [files, sortConfig, currentPath]);
-
-    const requestSort = key => {
-        let direction = 'ascending';
-        if (sortConfig.key === key && sortConfig.direction === 'ascending') {
-            direction = 'descending';
-        }
-        setSortConfig({ key, direction });
-    };
-
-    const handleRowClick = async (index) => {
-        setSelectedFile(index);
-        const file = sortedFiles[index];
-        if (file.type === 'Folder') {
-            const newChildren = await fetchFolderContents(file.id); // Use ID here
-            file.children = newChildren;
-            setCurrentPath([...currentPath, file.name]);
-            setSelectedFile(null);
-            setActiveFolder(file.name);
-        }
-    };
-
-    const handleContextMenu = (event, index) => {
-        event.preventDefault();
-        if (event.target.closest('.context-menu')) {
-            return; // Prevent dismissing or re-triggering inside the context menu
-        }
-        if (event.target.closest('.sidebar') || event.target.closest('.count') || activeFolder === 'Logs') {
-            return; // Disable context menu in the sidebar, footer, and logs
-        }
-        setSelectedFile(index);
-        let items = [];
-        if (index !== undefined) {
-            const file = sortedFiles[index];
-            if (file.type === 'Folder') {
-                items = [
-                    { label: 'Open', action: () => { handleRowClick(index); setContextMenu({ visible: false, x: 0, y: 0, items: [] }); } },
-                    'Rename',
-                    activeFolder === 'Deleted' ? 'Restore' : 'Delete'
-                ];
-            } else if (file.type.includes('Image') || file.type.includes('SVG') || file.type.includes('JPEG') || file.type.includes('JPG') || file.type.includes('GIF') || file.type.includes('ICO') || file.type.includes('PNG')) {
-                items = [
-                    'Preview',
-                    { label: 'Download', action: () => downloadMedia(file.filepath) },
-                    'Rename',
-                    { label: 'Copy Link', action: () => copyLinkToClipboard(getCdnUrl(file.filepath)) },
-                    activeFolder === 'Deleted' ? 'Restore' : 'Delete'
-                ];
-            } else {
-                items = ['Open', 'Download', 'Rename', activeFolder === 'Deleted' ? 'Restore' : 'Delete'];
-            }
-        } else {
-            if (activeFolder !== 'Deleted' && activeFolder !== 'Logs') {
-                items = ['Upload Image', { label: 'Create Folder', action: () => createFolder() }];
-            }
-        }
-        const menuX = Math.min(event.clientX, window.innerWidth - 150);
-        const menuY = Math.min(event.clientY, window.innerHeight - 100);
-        setContextMenu({ visible: true, x: menuX, y: menuY, items });
-    };
-
-    const handleClick = (event) => {
-        if (contextMenu.visible && !event.target.closest('.context-menu')) {
-            setContextMenu({ visible: false, x: 0, y: 0, items: [] });
-        }
-        if (event.button === 2) {
-            event.preventDefault();
-            const row = event.target.closest('tr');
-            const index = row ? Array.from(event.target.closest('tbody').children).indexOf(row) : undefined;
-            handleContextMenu(event, index);
-        }
-        if (!event.target.closest('.content tr') && !event.target.closest('.sidebar') && !event.target.closest('.navigation-bar') && !event.target.closest('.count') && !event.target.closest('input')) {
-            setSelectedFile(null);
-            if (isCreatingFolder) {
-                handleCreateFolder();
-            }
-        }
-    };
-
-    const toggleDarkMode = () => {
-        setDarkMode(!darkMode);
-    };
-
-    const handleFolderClick = (folder) => {
-        setActiveFolder(folder);
-        setSelectedFile(null);
-        setCurrentPath([folder]);
-        if (isMobile) {
-            setSidebarCollapsed(true);
-        }
-    };
-
-const toggleSidebar = () => {
-    setSidebarCollapsed(!sidebarCollapsed);
-};
-
-React.useEffect(() => {
-    document.addEventListener('click', handleClick);
-    document.addEventListener('contextmenu', handleClick);
-    return () => {
-        document.removeEventListener('click', handleClick);
-        document.removeEventListener('contextmenu', handleClick);
-    };
-}, [contextMenu.visible, isCreatingFolder]);
-
-React.useEffect(() => {
-    if (darkMode) {
-        document.documentElement.style.setProperty('--background-color', '#1e1e1e');
-        document.documentElement.style.setProperty('--text-color', '#ffffff');
-        document.documentElement.style.setProperty('--window-background-color', '#2e2e2e');
-        document.documentElement.style.setProperty('--sidebar-background-color', '#1e1e1e');
-        document.documentElement.style.setProperty('--section-title-color', '#888888');
-        document.documentElement.style.setProperty('--folder-hover-background-color', '#4e4e4e');
-        document.documentElement.style.setProperty('--folder-active-background-color', '#3e3e3e');
-        document.documentElement.style.setProperty('--folder-no-select-background-color', '#2e2e2e');
-        document.documentElement.style.setProperty('--table-header-background-color', '#3e3e3e');
-        document.documentElement.style.setProperty('--table-header-hover-background-color', '#4e4e4e');
-        document.documentElement.style.setProperty('--table-row-even-background-color', '#2e2e2e');
-        document.documentElement.style.setProperty('--table-row-hover-background-color', '#4e4e4e');
-        document.documentElement.style.setProperty('--table-row-selected-background-color', '#5e5e5e');
-        document.documentElement.style.setProperty('--context-menu-background-color', '#2e2e2e');
-        document.documentElement.style.setProperty('--context-menu-border-color', '#4e4e4e');
-        document.documentElement.style.setProperty('--context-menu-item-hover-background-color', '#4e4e4e');
-    } else {
-        document.documentElement.style.setProperty('--background-color', '#f5f5f5');
-        document.documentElement.style.setProperty('--text-color', '#000000');
-        document.documentElement.style.setProperty('--window-background-color', '#ffffff');
-        document.documentElement.style.setProperty('--sidebar-background-color', '#f0f0f0');
-        document.documentElement.style.setProperty('--section-title-color', '#666666');
-        document.documentElement.style.setProperty('--folder-hover-background-color', '#e0e0e0');
-        document.documentElement.style.setProperty('--folder-active-background-color', '#d0d0d0');
-        document.documentElement.style.setProperty('--folder-no-select-background-color', '#f0f0f0');
-        document.documentElement.style.setProperty('--table-header-background-color', '#d0d0d0');
-        document.documentElement.style.setProperty('--table-header-hover-background-color', '#c0c0c0');
-        document.documentElement.style.setProperty('--table-row-even-background-color', '#f0f0f0');
-        document.documentElement.style.setProperty('--table-row-hover-background-color', '#e0e0e0');
-        document.documentElement.style.setProperty('--table-row-selected-background-color', '#c0c0c0');
-        document.documentElement.style.setProperty('--context-menu-background-color', '#ffffff');
-        document.documentElement.style.setProperty('--context-menu-border-color', '#d0d0d0');
-        document.documentElement.style.setProperty('--context-menu-item-hover-background-color', '#e0e0e0');
-    }
-}, [darkMode]);
-
-const getCdnUrl = (filepath) => {
-    const internalPathSegment = "/usr/www/igfastdl/imperfectandcompany-cdn";
-    return `${CDN_BASE_URL}${filepath.replace(internalPathSegment, "")}`;
-};
-
-const copyLinkToClipboard = (url) => {
-    navigator.clipboard.writeText(url).then(() => {
-        alert('Link copied to clipboard!');
-    }, (err) => {
-        console.error('Failed to copy link: ', err);
-    });
-};
-
-const downloadMedia = (filepath) => {
-    if (!filepath) {
-        console.error('Filepath is missing');
-        return;
-    }
-    const url = getCdnUrl(filepath);
-    console.log('Download URL:', url);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = url.split('/').pop(); // Suggests a filename to save as
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-};
-
-const createFolder = () => {
-    setIsCreatingFolder(true);
-    setNewFolderName('New Folder');
-};
-
-const handleCreateFolder = async () => {
-    if (!newFolderName.trim()) {
-        alert('Folder name cannot be empty.');
-        return;
-    }
-
-    // Determine the folder_id based on the current path
-    let parentFolderId = null;
-    if (currentPath.length > 1) { // More than just 'Documents'
-        const folderName = currentPath[currentPath.length - 1];
-        const folderData = files[currentPath[0]].find(f => f.name === folderName);
-        if (folderData && folderData.id) {
-            parentFolderId = folderData.id;
-        }
-    }
-
-    const formData = new FormData();
-    formData.append("name", newFolderName);
-    if (parentFolderId !== null) {
-        formData.append("parent_folder_id", parentFolderId.toString());
-    }
-
-    try {
-        const response = await fetch('https://api.imperfectgamers.org/media/folder/create', {
-            method: 'POST',
-            body: formData,
-            headers: {
-                'Authorization': 'eb9fe2c075e77ef69f95276858340813249fefa81cedb86ebb21757d336b8bcb1837200c830fc652e7edc9d3847d7d9f493704f16675c83aa7879613f34537ce'
-            }
-        });
-        const data = await response.json();
-        if (data.status === 'success') {
-            const newFolder = {
-                id: data.folder_id,
-                name: newFolderName,
-                size: '1 item',
-                type: 'Folder',
-                modified: new Date().toLocaleString(),
-                icon: 'fa-folder',
-                children: []
             };
 
-            const updatedFiles = { ...files };
-            if (parentFolderId) {
-                const folderIndex = updatedFiles[currentPath[0]].findIndex(f => f.id === parentFolderId);
-                updatedFiles[currentPath[0]][folderIndex].children.push(newFolder);
-            } else {
-                updatedFiles[currentPath[0]].push(newFolder);
-            }
+            const fetchFolderContents = async (folderId) => {
+                if (isNaN(folderId)) {
+                    console.error('Invalid folder ID:', folderId);
+                    return [];
+                }
 
-            setFiles(updatedFiles);
-            setIsCreatingFolder(false);
-            setNewFolderName('');
-        } else {
-            throw new Error(data.message);
-        }
-    } catch (error) {
-        console.error('Failed to create folder:', error);
-        alert(`Failed to create folder: ${error.message}`);
-        setIsCreatingFolder(false);
-    }
-};
+                try {
+                    const url = `https://api.imperfectgamers.org/media/folder/fetch/${encodeURIComponent(folderId)}`;
+                    const response = await fetch(url, {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': 'eb9fe2c075e77ef69f95276858340813249fefa81cedb86ebb21757d336b8bcb1837200c830fc652e7edc9d3847d7d9f493704f16675c83aa7879613f34537ce'
+                        }
+                    });
+                    const data = await response.json();
+                    if (data.status === 'success') {
+                        const folders = data.folders.map(folder => ({
+                            id: folder.folder_id,
+                            name: folder.name,
+                            size: '1 item',
+                            type: 'Folder',
+                            modified: new Date(folder.updated_at).toLocaleString(),
+                            icon: 'fa-folder',
+                            children: []
+                        }));
+                        const media = data.media.map(file => ({
+                            name: file.filename,
+                            size: `${file.filesize} bytes`,
+                            type: file.filetype,
+                            modified: new Date(file.created_at).toLocaleString(),
+                            icon: file.filetype.includes('image') ? 'fa-image' : 'fa-file-alt',
+                            filepath: file.filepath
+                        }));
+                        return [...folders, ...media];
+                    } else {
+                        console.error('Error fetching folder contents:', data.message);
+                        return [];
+                    }
+                } catch (error) {
+                    console.error('Failed to fetch folder contents:', error);
+                    return [];
+                }
+            };
 
-const handleKeyPress = (event) => {
-    if (event.key === 'Enter') {
-        handleCreateFolder();
-    }
-};
-
-const handleBlur = () => {
-    if (isCreatingFolder) {
-        handleCreateFolder();
-    }
-};
-
-const renderEmptyState = (folder) => {
-    return (
-        <div className="empty-state">
-            {folder === 'Deleted' ? (
-                <div>
-                    <i className="fas fa-trash-alt fa-2x"></i>
-                    <p>No deleted files.</p>
-                </div>
-            ) : folder === 'Logs' ? (
-                <div>
-                    <i className="fas fa-file-alt fa-2x"></i>
-                    <p>No logs available.</p>
-                </div>
-            ) : (
-                <p>No files in this folder.</p>
-            )}
-        </div>
-    );
-};
-
-const handleDragOver = (event) => {
-    event.preventDefault();
-};
-
-const handleDrop = async (event) => {
-    event.preventDefault();
-    const dtFiles = event.dataTransfer.files;
-    if (dtFiles.length > 1) {
-        alert("Please upload only one file at a time.");
-        return;
-    }
-
-    const file = dtFiles[0];
-    const formData = new FormData();
-    formData.append('upload', file);
-
-    // Determine the folder_id based on the current path
-    let folderId = null;
-    if (currentPath.length > 1) { // More than just 'Documents'
-        const folderName = currentPath[currentPath.length - 1];
-        const folderData = files[currentPath[0]].find(f => f.name === folderName);
-        if (folderData && folderData.id) {
-            folderId = folderData.id;
-        }
-    }
-
-    // Append folder_id to the form data if it exists
-    if (folderId) {
-        formData.append('folder_id', folderId);
-    }
-
-    try {
-        const response = await fetch('https://api.imperfectgamers.org/media/upload', {
-            method: 'POST',
-            headers: {
-                'Authorization': 'eb9fe2c075e77ef69f95276858340813249fefa81cedb86ebb21757d336b8bcb1837200c830fc652e7edc9d3847d7d9f493704f16675c83aa7879613f34537ce'
-            },
-            body: formData
-        });
-        const data = await response.json();
-        if (data.status === 'success') {
-            // Refresh the folder contents
-            if (folderId) {
-                const newChildren = await fetchFolderContents(folderId);
-                const updatedFiles = { ...files };
-                const folderName = currentPath[currentPath.length - 1];
-                const folderIndex = updatedFiles[currentPath[0]].findIndex(f => f.name === folderName);
-                updatedFiles[currentPath[0]][folderIndex].children = newChildren;
-                setFiles(updatedFiles);
-            } else {
+            React.useEffect(() => {
                 fetchTopLevelFoldersAndMedia();
-            }
-        } else {
-            alert(data.message);
-        }
-    } catch (error) {
-        console.error('Failed to upload file:', error);
-    }
-};
+            }, []);
 
-return (
-    <div className="window" onDragOver={handleDragOver} onDrop={handleDrop}>
-        <div className="navigation-bar">
-            <i className={`fas fa-bars navigation-button ${sidebarCollapsed ? '' : 'hidden'}`} onClick={toggleSidebar}></i>
-            <i className="fas fa-caret-left navigation-button"></i>
-            <i className="fas fa-caret-right navigation-button"></i>
-            <span className="navigation-title">{currentPath.join(' > ')}</span>
-        </div>
-        <div className="content-wrapper">
-            <div className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`} onContextMenu={(e) => e.preventDefault()}>
-                <div className="section-title no-select">Main</div>
-                <div className={`folder ${activeFolder === 'Documents' ? 'active' : ''}`} onClick={() => handleFolderClick('Documents')}>Documents</div>
-                <div className="section-title no-select" style={{ marginTop: '16px'}}>Other</div>
-                <div className={`folder ${activeFolder === 'Deleted' ? 'active' : ''}`} onClick={() => handleFolderClick('Deleted')}>Deleted</div>
-                <div className={`folder ${activeFolder === 'Logs' ? 'active' : ''}`} onClick={() => handleFolderClick('Logs')}>Logs</div>
-                <div className="switch-container">
-                    <span className="switch-label">Dark Mode</span>
-                    <label className="switch">
-                        <input type="checkbox" checked={darkMode} onChange={toggleDarkMode} />
-                        <span className="slider"></span>
-                    </label>
-                </div>
-            </div>
-            <div className="content">
-                <table>
-                    <thead>
-                        <tr>
-                            <th onClick={() => requestSort('name')}>Name</th>
-                            <th onClick={() => requestSort('size')}>Size</th>
-                            <th onClick={() => requestSort('type')}>Type</th>
-                            <th onClick={() => requestSort('modified')}>Modified</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                    {isCreatingFolder && (
-                        <tr>
-                            <td colSpan="4">
-                                <input
-                                    type="text"
-                                    value={newFolderName}
-                                    onChange={(e) => setNewFolderName(e.target.value)}
-                                    onKeyPress={handleKeyPress}
-                                    onBlur={handleBlur}
-                                    autoFocus
-                                    className="w-full p-2 border border-gray-300 rounded"
-                                />
-                            </td>
-                        </tr>
-                    )}
-                        {sortedFiles.length > 0 ? (
-                            sortedFiles.map((file, index) => (
-                                <tr key={index} className={selectedFile === index ? 'selected' : ''} onClick={() => handleRowClick(index)} onContextMenu={(event) => handleContextMenu(event, index)}>
-                                    <td><i className={`fas ${file.icon} icon`}></i>{file.name}</td>
-                                    <td>{file.size}</td>
-                                    <td>{file.type}</td>
-                                    <td>{file.modified}</td>
-                                </tr>
-                            ))
+            const checkMobile = () => {
+                setIsMobile(window.innerWidth <= 767);
+                setSidebarCollapsed(window.innerWidth <= 767);
+            };
+
+            React.useEffect(() => {
+                window.addEventListener('resize', checkMobile);
+                return () => window.removeEventListener('resize', checkMobile);
+            }, []);
+
+            const sortedFiles = React.useMemo(() => {
+                let path = files;
+                currentPath.forEach((step, index) => {
+                    if (index === 0) {
+                        path = path[step] || [];
+                    } else {
+                        path = path.find(item => item.name === step)?.children || [];
+                    }
+                });
+                let sortableFiles = Array.isArray(path) ? [...path] : [];
+
+                if (currentPath.length > 1) {
+                    sortableFiles.unshift({
+                        name: "Go back",
+                        type: "Folder",
+                        size: '',
+                        modified: '',
+                        icon: 'fa-folder',
+                        isGoBack: true
+                    });
+                }
+
+                sortableFiles.sort((a, b) => {
+                    if (a.isGoBack || b.isGoBack) return 0; // Do not sort "Go back" option
+                    if (a[sortConfig.key] < b[sortConfig.key]) {
+                        return sortConfig.direction === 'ascending' ? -1 : 1;
+                    }
+                    if (a[sortConfig.key] > b[sortConfig.key]) {
+                        return sortConfig.direction === 'ascending' ? 1 : -1;
+                    }
+                    return 0;
+                });
+                return sortableFiles;
+            }, [files, sortConfig, currentPath]);
+
+            const requestSort = key => {
+                let direction = 'ascending';
+                if (sortConfig.key === key && sortConfig.direction === 'ascending') {
+                    direction = 'descending';
+                }
+                setSortConfig({ key, direction });
+            };
+
+            const handleRowClick = async (index) => {
+                setSelectedFile(index);
+                const file = sortedFiles[index];
+                if (file.isGoBack) {
+                    setCurrentPath(currentPath.slice(0, -1));
+                    setSelectedFile(null);
+                    return;
+                }
+                if (file.type === 'Folder') {
+                    const newChildren = await fetchFolderContents(file.id); // Use ID here
+                    file.children = newChildren;
+                    setCurrentPath([...currentPath, file.name]);
+                    setSelectedFile(null);
+                    setActiveFolder(file.name);
+                }
+            };
+
+            const handleContextMenu = (event, index) => {
+                event.preventDefault();
+                if (event.target.closest('.context-menu')) {
+                    return; // Prevent dismissing or re-triggering inside the context menu
+                }
+                if (event.target.closest('.sidebar') || event.target.closest('.count') || activeFolder === 'Logs') {
+                    return; // Disable context menu in the sidebar, footer, and logs
+                }
+                setSelectedFile(index);
+                let items = [];
+                if (index !== undefined) {
+                    const file = sortedFiles[index];
+                    if (file.type === 'Folder') {
+                        items = [
+                            { label: 'Open', action: () => { handleRowClick(index); setContextMenu({ visible: false, x: 0, y: 0, items: [] }); } },
+                            'Rename',
+                            activeFolder === 'Deleted' ? 'Restore' : 'Delete'
+                        ];
+                    } else if (file.type.includes('Image') || file.type.includes('SVG') || file.type.includes('JPEG') || file.type.includes('JPG') || file.type.includes('GIF') || file.type.includes('ICO') || file.type.includes('PNG')) {
+                        items = [
+                            'Preview',
+                            { label: 'Download', action: () => downloadMedia(file.filepath) },
+                            'Rename',
+                            { label: 'Copy Link', action: () => copyLinkToClipboard(getCdnUrl(file.filepath)) },
+                            activeFolder === 'Deleted' ? 'Restore' : 'Delete'
+                        ];
+                    } else {
+                        items = ['Open', 'Download', 'Rename', activeFolder === 'Deleted' ? 'Restore' : 'Delete'];
+                    }
+                } else {
+                    if (activeFolder !== 'Deleted' && activeFolder !== 'Logs') {
+                        items = ['Upload Image', { label: 'Create Folder', action: () => createFolder() }];
+                    }
+                }
+                const menuX = Math.min(event.clientX, window.innerWidth - 150);
+                const menuY = Math.min(event.clientY, window.innerHeight - 100);
+                setContextMenu({ visible: true, x: menuX, y: menuY, items });
+            };
+
+            const handleClick = (event) => {
+                if (contextMenu.visible && !event.target.closest('.context-menu')) {
+                    setContextMenu({ visible: false, x: 0, y: 0, items: [] });
+                }
+                if (event.button === 2) {
+                    event.preventDefault();
+                    const row = event.target.closest('tr');
+                    const index = row ? Array.from(event.target.closest('tbody').children).indexOf(row) : undefined;
+                    handleContextMenu(event, index);
+                }
+                if (!event.target.closest('.content tr') && !event.target.closest('.sidebar') && !event.target.closest('.navigation-bar') && !event.target.closest('.count') && !event.target.closest('input')) {
+                    setSelectedFile(null);
+                    if (isCreatingFolder) {
+                        handleCreateFolder();
+                    }
+                }
+            };
+
+            const toggleDarkMode = () => {
+                setDarkMode(!darkMode);
+            };
+
+            const handleFolderClick = (folder) => {
+                setActiveFolder(folder);
+                setSelectedFile(null);
+                setCurrentPath([folder]);
+                if (isMobile) {
+                    setSidebarCollapsed(true);
+                }
+            };
+
+            const toggleSidebar = () => {
+                setSidebarCollapsed(!sidebarCollapsed);
+            };
+
+            React.useEffect(() => {
+                document.addEventListener('click', handleClick);
+                document.addEventListener('contextmenu', handleClick);
+                return () => {
+                    document.removeEventListener('click', handleClick);
+                    document.removeEventListener('contextmenu', handleClick);
+                };
+            }, [contextMenu.visible, isCreatingFolder]);
+
+            const getCdnUrl = (filepath) => {
+                return `${CDN_BASE_URL}/${filepath}`;
+            };
+
+            const copyLinkToClipboard = (url) => {
+                navigator.clipboard.writeText(url).then(() => {
+                    alert('Link copied to clipboard!');
+                }, (err) => {
+                    console.error('Failed to copy link: ', err);
+                });
+            };
+
+            const downloadMedia = (filepath) => {
+                const link = document.createElement('a');
+                link.href = getCdnUrl(filepath);
+                link.download = filepath.split('/').pop();
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            };
+
+            const createFolder = () => {
+                setIsCreatingFolder(true);
+                setNewFolderName('New Folder');
+            };
+
+            const handleCreateFolder = async () => {
+                if (!newFolderName.trim()) {
+                    alert('Folder name cannot be empty.');
+                    setIsCreatingFolder(false);
+                    setNewFolderName('');
+                    return;
+                }
+
+                // Determine the folder_id based on the current path
+                let parentFolderId = null;
+                if (currentPath.length > 1) { // More than just 'Documents'
+                    const folderName = currentPath[currentPath.length - 1];
+                    const folderData = files[currentPath[0]].find(f => f.name === folderName);
+                    if (folderData && folderData.id) {
+                        parentFolderId = folderData.id;
+                    }
+                }
+
+                const formData = new FormData();
+                formData.append("name", newFolderName);
+                if (parentFolderId !== null) {
+                    formData.append("parent_folder_id", parentFolderId.toString());
+                }
+
+                try {
+                    const response = await fetch('https://api.imperfectgamers.org/media/folder/create', {
+                        method: 'POST',
+                        body: formData,
+                        headers: {
+                            'Authorization': 'eb9fe2c075e77ef69f95276858340813249fefa81cedb86ebb21757d336b8bcb1837200c830fc652e7edc9d3847d7d9f493704f16675c83aa7879613f34537ce'
+                        }
+                    });
+                    const data = await response.json();
+                    if (data.status === 'success') {
+                        const newFolder = {
+                            id: data.folder_id,
+                            name: newFolderName,
+                            size: '1 item',
+                            type: 'Folder',
+                            modified: new Date().toLocaleString(),
+                            icon: 'fa-folder',
+                            children: []
+                        };
+
+                        const updatedFiles = { ...files };
+                        if (parentFolderId) {
+                            const folderIndex = updatedFiles[currentPath[0]].findIndex(f => f.id === parentFolderId);
+                            updatedFiles[currentPath[0]][folderIndex].children.push(newFolder);
+                        } else {
+                            updatedFiles[currentPath[0]].push(newFolder);
+                        }
+
+                        setFiles(updatedFiles);
+                        setIsCreatingFolder(false);
+                        setNewFolderName('');
+                    } else {
+                        throw new Error(data.message);
+                    }
+                } catch (error) {
+                    console.error('Failed to create folder:', error);
+                    alert(`Failed to create folder: ${error.message}`);
+                    setIsCreatingFolder(false);
+                }
+            };
+
+            const handleKeyPress = (event) => {
+                if (event.key === 'Enter') {
+                    handleCreateFolder();
+                } else if (event.key === 'Escape') {
+                    setIsCreatingFolder(false);
+                    setNewFolderName('');
+                }
+            };
+
+            const handleBlur = () => {
+                if (isCreatingFolder && !newFolderName.trim()) {
+                    setIsCreatingFolder(false);
+                    setNewFolderName('');
+                }
+            };
+
+            const renderEmptyState = (folder) => {
+                return (
+                    <div className="empty-state">
+                        {folder === 'Deleted' ? (
+                            <div>
+                                <i className="fas fa-trash-alt fa-2x"></i>
+                                <p>No deleted files.</p>
+                            </div>
+                        ) : folder === 'Logs' ? (
+                            <div>
+                                <i className="fas fa-file-alt fa-2x"></i>
+                                <p>No logs available.</p>
+                            </div>
                         ) : (
-                            <tr>
-                                <td colSpan="4">{renderEmptyState(currentPath[currentPath.length - 1])}</td>
-                            </tr>
+                            <p>No files in this folder.</p>
                         )}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-        <div className="count" onContextMenu={(e) => e.preventDefault()}>
-            Total Files: {sortedFiles.length}
-        </div>
-        {contextMenu.visible && (
-            <div className="context-menu" style={{ top: contextMenu.y, left: contextMenu.x, display: 'block'}} onContextMenu={(e) => e.preventDefault()}>
-                {contextMenu.items.map((item, index) => (
-                    <div key={index} className="context-menu-item" onClick={() => { if (typeof item.action === 'function') { item.action(); setContextMenu({ visible: false, x: 0, y: 0, items: [] }); } }}>{item.label || item}</div>
-                ))}
-            </div>
-        )}
-    </div>
-);
-};
+                    </div>
+                );
+            };
 
-ReactDOM.render(<App />, document.getElementById('root'));
-</script>
+            const handleDragOver = (event) => {
+                event.preventDefault();
+            };
+
+            const handleDrop = async (event) => {
+                event.preventDefault();
+                const dtFiles = event.dataTransfer.files;
+                if (dtFiles.length > 1) {
+                    alert("Please upload only one file at a time.");
+                    return;
+                }
+
+                const file = dtFiles[0];
+                const formData = new FormData();
+                formData.append('upload', file);
+
+                // Determine the folder_id based on the current path
+                let folderId = null;
+                if (currentPath.length > 1) { // More than just 'Documents'
+                    const folderName = currentPath[currentPath.length - 1];
+                    const folderData = files[currentPath[0]].find(f => f.name === folderName);
+                    if (folderData && folderData.id) {
+                        folderId = folderData.id;
+                    }
+                }
+
+                // Append folder_id to the form data if it exists
+                if (folderId) {
+                    formData.append('folder_id', folderId);
+                }
+
+                try {
+                    const response = await fetch('https://api.imperfectgamers.org/media/upload', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'eb9fe2c075e77ef69f95276858340813249fefa81cedb86ebb21757d336b8bcb1837200c830fc652e7edc9d3847d7d9f493704f16675c83aa7879613f34537ce'
+                        },
+                        body: formData
+                    });
+                    const data = await response.json();
+                    if (data.status === 'success') {
+                        // Refresh the folder contents
+                        if (folderId) {
+                            const newChildren = await fetchFolderContents(folderId);
+                            const updatedFiles = { ...files };
+                            const folderName = currentPath[currentPath.length - 1];
+                            const folderIndex = updatedFiles[currentPath[0]].findIndex(f => f.name === folderName);
+                            updatedFiles[currentPath[0]][folderIndex].children = newChildren;
+                            setFiles(updatedFiles);
+                        } else {
+                            fetchTopLevelFoldersAndMedia();
+                        }
+                    } else {
+                        alert(data.message);
+                    }
+                } catch (error) {
+                    console.error('Failed to upload file:', error);
+                }
+            };
+
+            return (
+                <div className="window" onDragOver={handleDragOver} onDrop={handleDrop}>
+                    <div className="navigation-bar">
+                        <i className={`fas fa-bars navigation-button ${sidebarCollapsed ? '' : 'hidden'}`} onClick={toggleSidebar}></i>
+                        <span className="navigation-title">{currentPath.join(' > ')}</span>
+                    </div>
+                    <div className="content-wrapper">
+                        <div className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`} onContextMenu={(e) => e.preventDefault()}>
+                            <div className="header">IGS</div>
+                            <div className="section-title no-select">Main</div>
+                            <div className={`folder ${activeFolder === 'Documents' ? 'active' : ''}`} onClick={() => handleFolderClick('Documents')}>Documents</div>
+                            <div className="section-title no-select">Other</div>
+                            <div className={`folder ${activeFolder === 'Deleted' ? 'active' : ''}`} onClick={() => handleFolderClick('Deleted')}>Deleted</div>
+                            <div className={`folder ${activeFolder === 'Logs' ? 'active' : ''}`} onClick={() => handleFolderClick('Logs')}>Logs</div>
+                        </div>
+                        <div className="content">
+                            <div className="table-container">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th onClick={() => requestSort('name')}>
+                                                Name {sortConfig.key === 'name' && <i className={`fas fa-sort-${sortConfig.direction === 'ascending' ? 'up' : 'down'} sort-indicator`}></i>}
+                                            </th>
+                                            <th onClick={() => requestSort('size')}>
+                                                Size {sortConfig.key === 'size' && <i className={`fas fa-sort-${sortConfig.direction === 'ascending' ? 'up' : 'down'} sort-indicator`}></i>}
+                                            </th>
+                                            <th onClick={() => requestSort('type')}>
+                                                Type {sortConfig.key === 'type' && <i className={`fas fa-sort-${sortConfig.direction === 'ascending' ? 'up' : 'down'} sort-indicator`}></i>}
+                                            </th>
+                                            <th onClick={() => requestSort('modified')}>
+                                                Modified {sortConfig.key === 'modified' && <i className={`fas fa-sort-${sortConfig.direction === 'ascending' ? 'up' : 'down'} sort-indicator`}></i>}
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {isCreatingFolder && (
+                                            <tr>
+                                                <td colSpan="4">
+                                                    <input
+                                                        type="text"
+                                                        value={newFolderName}
+                                                        onChange={(e) => setNewFolderName(e.target.value)}
+                                                        onKeyPress={handleKeyPress}
+                                                        onBlur={handleBlur}
+                                                        autoFocus
+                                                        className="new-folder-input"
+                                                        placeholder="Enter folder name..."
+                                                    />
+                                                </td>
+                                            </tr>
+                                        )}
+                                        {sortedFiles.length > 0 ? (
+                                            sortedFiles.map((file, index) => (
+                                                <tr key={index} className={selectedFile === index ? 'selected' : ''} onClick={() => handleRowClick(index)} onContextMenu={(event) => handleContextMenu(event, index)}>
+                                                    <td><i className={`fas ${file.icon} icon`}></i>{file.name}</td>
+                                                    <td>{file.size}</td>
+                                                    <td>{file.type}</td>
+                                                    <td>{file.modified}</td>
+                                                </tr>
+                                            ))
+                                        ) : (
+                                            <tr>
+                                                <td colSpan="4">{renderEmptyState(currentPath[currentPath.length - 1])}</td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="count" onContextMenu={(e) => e.preventDefault()}>
+                        Total Files: {sortedFiles.length}
+                    </div>
+                    {contextMenu.visible && (
+                        <div className="context-menu" style={{ top: contextMenu.y, left: contextMenu.x, display: 'block'}} onContextMenu={(e) => e.preventDefault()}>
+                            {contextMenu.items.map((item, index) => (
+                                <div key={index} className="context-menu-item" onClick={() => { if (typeof item.action === 'function') { item.action(); setContextMenu({ visible: false, x: 0, y: 0, items: [] }); } }}>{item.label || item}</div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
 </body>
 </html>
