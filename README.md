@@ -13,6 +13,8 @@ The `Imperfect File Manager` represents an evolution from the initial MVP, incor
 - **Drag and Drop Uploads**: Supports dragging and dropping files directly into folders, streamlining the upload process.
 - **Responsive Table**: A sortable table displays file details such as name, size, type, and modification date, with click-to-sort headers.
 
+
+
 - ### React Components
 
 The application is built using React hooks. Key functionalities include:
@@ -25,19 +27,52 @@ The application is built using React hooks. Key functionalities include:
 The application defines a set of CSS custom properties (variables) that allow easy theming and adjustments to the UI elements like colors and backgrounds.
 
 ### Security
-
+ 
 Authentication is handled via token-based headers in fetch requests to ensure secure access to the backend API.
+
+## Screenshots
+
+Below are screenshots that illustrate various features and aspects of the Imperfect File Manager. These images provide a visual reference to complement the descriptions of the system's capabilities and interface.
+
+### Main Interface
+
+The main interface of the Imperfect File Manager, showing the dynamic sidebar, responsive table, and file management options:
+
+![Main Interface](https://github.com/user-attachments/assets/99f541d5-f34a-4811-8e4a-2b046dc23d11)
+
+### Dark Mode
+
+Example of the dark mode toggle effect, showcasing the user interface under dark theme settings:
+
+![Dark Mode](https://github.com/user-attachments/assets/f67a99ea-071e-40e1-be47-56ebf7723b5b)
+
+
+### File Upload
+
+The file upload process, demonstrating drag and drop uploads and file validation feedback:
+
+![File Upload](https://github.com/user-attachments/assets/9cee1602-b9a9-4797-ae6f-d6dbf337acc6)
+
+### Contextual Menu
+
+Illustration of the contextual menu options available for file and folder operations:
+
+![Contextual Menu Folder](https://github.com/user-attachments/assets/bc972608-cd18-497b-b3a0-754c33750c48)
+
+![Contextual Menu Media](https://github.com/user-attachments/assets/ba257618-fcae-4eed-a927-d853558e7aa9)
+
 
 ## Getting Started
 
 To access the `Imperfect File Manager`:
 1. Ensure you have a modern browser that supports ES6+.
 2. Visit https://files.imperfectandcompany.com/.
-3. Login with your Imperfect Account
+3. Login with your Imperfect Account.
   - NOTE: Use your Imperfect Gamers account details until we move to Imperfect Identity to support different tenants for external businesses, our own internal products, and customers.
-5. The application will connect to the backend via predefined API routes.
+4. The application will connect to the backend via predefined API routes.
 
 ## API Integration
+This section describes how the application interacts with the backend through various endpoints, handling different aspects of file and folder management.
 
 The application interacts with the backend through several endpoints, handling different aspects of file and folder management:
 - **Fetch Top-Level Folders and Media**: GET request to `/media/top-level`.
@@ -167,7 +202,7 @@ The MVP was essential for:
 - Identifying potential user experience improvements.
 - Ensuring that file and folder management functionalities were correctly implemented.
 - Testing security and authentication mechanisms through practical scenarios.
-
+ 
 ### Key Components
 
 The MVP included several components, each tailored to test specific parts of the system:
@@ -197,3 +232,7 @@ The MVP included several components, each tailored to test specific parts of the
 
 #### Create Folder:
 <img src="https://github.com/user-attachments/assets/84c3c6ec-6dc2-4576-b19b-c119a4c34178" width="600" />
+
+#### Edit Media:
+<img src="https://github.com/user-attachments/assets/936e7c8f-11bc-4c64-8d6f-1725e077144b" width="600" />
+
