@@ -308,6 +308,7 @@
             const [currentPath, setCurrentPath] = React.useState(['Documents']);
             const [isCreatingFolder, setIsCreatingFolder] = React.useState(false);
             const [newFolderName, setNewFolderName] = React.useState('');
+            const [isCreatingFolderInProgress, setIsCreatingFolderInProgress] = React.useState(false);
 
             const fetchTopLevelFoldersAndMedia = async () => {
                 try {
@@ -426,7 +427,7 @@
                 if (currentPath.length > 1) {
                     sortableFiles.unshift({
                         name: "Go back",
-                        type: "Folder",
+                        type: "",
                         size: '',
                         modified: '',
                         icon: 'fa-folder',
@@ -458,6 +459,23 @@
             const handleRowClick = async (index) => {
                 setSelectedFile(index);
                 const file = sortedFiles[index];
+
+    // If user is trying to navigate back or into another folder while creating a folder
+    if (isCreatingFolder) {
+        // Optional: Prompt user or automatically handle the ongoing folder creation
+        // You might want to use a confirmation dialog here to ask if the user wants to save the new folder
+        if (!confirm('You are currently creating a new folder. Do you want to save it?')) {
+            setIsCreatingFolder(false);
+            setNewFolderName('');
+        } else {
+            const success = await handleCreateFolder();
+            if(!success){
+                return;
+            }
+        }
+    }
+
+
                 if (file.isGoBack) {
                     setCurrentPath(currentPath.slice(0, -1));
                     setSelectedFile(null);
@@ -511,36 +529,80 @@
                 setContextMenu({ visible: true, x: menuX, y: menuY, items });
             };
 
-            const handleClick = (event) => {
-                if (contextMenu.visible && !event.target.closest('.context-menu')) {
-                    setContextMenu({ visible: false, x: 0, y: 0, items: [] });
-                }
-                if (event.button === 2) {
-                    event.preventDefault();
-                    const row = event.target.closest('tr');
-                    const index = row ? Array.from(event.target.closest('tbody').children).indexOf(row) : undefined;
-                    handleContextMenu(event, index);
-                }
-                if (!event.target.closest('.content tr') && !event.target.closest('.sidebar') && !event.target.closest('.navigation-bar') && !event.target.closest('.count') && !event.target.closest('input')) {
-                    setSelectedFile(null);
-                    if (isCreatingFolder) {
-                        handleCreateFolder();
-                    }
-                }
-            };
+const handleClick = (event) => {
+    // Close context menu if clicking outside of it
+    if (contextMenu.visible && !event.target.closest('.context-menu')) {
+        setContextMenu({ visible: false, x: 0, y: 0, items: [] });
+    }
+
+    // Right-click handling for context menu
+    if (event.button === 2) {
+        event.preventDefault();
+        const row = event.target.closest('tr');
+        const index = row ? Array.from(event.target.closest('tbody').children).indexOf(row) : undefined;
+        handleContextMenu(event, index);
+    }
+
+    // Check if the click is not on specific elements
+    if (!event.target.closest('.content tr') &&
+        !event.target.closest('.navigation-bar') &&
+        !event.target.closest('.count') &&
+        !event.target.closest('input')) {
+        
+        const sidebarItem = event.target.closest('.folder');
+        if (sidebarItem) {
+            const folderName = sidebarItem.textContent.trim();
+            
+            // Check if we're in a nested folder and the user clicks "Documents"
+            const isInNestedFolder = currentPath.length > 1;
+            if (folderName === 'Logs' || folderName === 'Deleted' || (folderName === 'Documents' && isInNestedFolder)) {
+                // Dismiss the folder creation
+                setIsCreatingFolder(false);
+                setNewFolderName('');
+                setSelectedFile(null);
+            } else if (isCreatingFolder) {
+                // Allow folder creation if clicked outside specific elements and not on "Logs", "Deleted", or "Documents" from a subfolder
+                event.preventDefault();
+            }
+        } else {
+            // If click is not on the sidebar
+            setSelectedFile(null);
+            if (isCreatingFolder) {
+                handleCreateFolder();
+                event.preventDefault();
+            }
+        }
+    }
+};
 
             const toggleDarkMode = () => {
                 setDarkMode(!darkMode);
             };
 
             const handleFolderClick = (folder) => {
-                setActiveFolder(folder);
-                setSelectedFile(null);
-                setCurrentPath([folder]);
-                if (isMobile) {
-                    setSidebarCollapsed(true);
-                }
-            };
+    if (isCreatingFolder) {
+        if (folder === 'Deleted' || folder === 'Logs' || (folder === 'Documents' && currentPath.length > 1)) {
+            setIsCreatingFolder(false);
+            setNewFolderName('');
+            setActiveFolder(folder);
+            setSelectedFile(null);
+            setCurrentPath([folder]);
+            if (isMobile) {
+                setSidebarCollapsed(true);
+            }
+        } else if (folder === 'Documents' && currentPath.length === 1) {
+            // If we're in the main 'Documents' folder and a new folder is being created
+            handleCreateFolder();
+        }
+    } else {
+        setActiveFolder(folder);
+        setSelectedFile(null);
+        setCurrentPath([folder]);
+        if (isMobile) {
+            setSidebarCollapsed(true);
+        }
+    }
+};
 
             const toggleSidebar = () => {
                 setSidebarCollapsed(!sidebarCollapsed);
@@ -582,76 +644,122 @@
             };
 
             const handleCreateFolder = async () => {
-                if (!newFolderName.trim()) {
-                    alert('Folder name cannot be empty.');
-                    setIsCreatingFolder(false);
-                    setNewFolderName('');
-                    return;
-                }
+    if (isCreatingFolderInProgress) {
+        alert('A folder creation process is already in progress. Please wait.');
+        return false;
+    }
 
-                // Determine the folder_id based on the current path
-                let parentFolderId = null;
-                if (currentPath.length > 1) { // More than just 'Documents'
-                    const folderName = currentPath[currentPath.length - 1];
-                    const folderData = files[currentPath[0]].find(f => f.name === folderName);
-                    if (folderData && folderData.id) {
-                        parentFolderId = folderData.id;
-                    }
-                }
+    setIsCreatingFolderInProgress(true);
 
-                const formData = new FormData();
-                formData.append("name", newFolderName);
-                if (parentFolderId !== null) {
-                    formData.append("parent_folder_id", parentFolderId.toString());
-                }
+    const trimmedFolderName = newFolderName.trim();
 
-                try {
-                    const response = await fetch('https://api.imperfectgamers.org/media/folder/create', {
-                        method: 'POST',
-                        body: formData,
-                        headers: {
-                            'Authorization': 'eb9fe2c075e77ef69f95276858340813249fefa81cedb86ebb21757d336b8bcb1837200c830fc652e7edc9d3847d7d9f493704f16675c83aa7879613f34537ce'
-                        }
-                    });
-                    const data = await response.json();
-                    if (data.status === 'success') {
-                        const newFolder = {
-                            id: data.folder_id,
-                            name: newFolderName,
-                            size: '1 item',
-                            type: 'Folder',
-                            modified: new Date().toLocaleString(),
-                            icon: 'fa-folder',
-                            children: []
-                        };
+    if (!trimmedFolderName) {
+        alert('Folder name cannot be empty.');
+        resetFolderCreationState();
+        return false;
+    }
 
-                        const updatedFiles = { ...files };
-                        if (parentFolderId) {
-                            const folderIndex = updatedFiles[currentPath[0]].findIndex(f => f.id === parentFolderId);
-                            updatedFiles[currentPath[0]][folderIndex].children.push(newFolder);
-                        } else {
-                            updatedFiles[currentPath[0]].push(newFolder);
-                        }
+    if (trimmedFolderName.length > 50) {
+        alert('Folder name is too long. Please use a shorter name.');
+        resetFolderCreationState();
+        return false;
+    }
 
-                        setFiles(updatedFiles);
-                        setIsCreatingFolder(false);
-                        setNewFolderName('');
-                    } else {
-                        throw new Error(data.message);
-                    }
-                } catch (error) {
-                    console.error('Failed to create folder:', error);
-                    alert(`Failed to create folder: ${error.message}`);
-                    setIsCreatingFolder(false);
-                }
+    const invalidCharacters = /[<>:"\/\\|?*]/;
+    if (invalidCharacters.test(trimmedFolderName)) {
+        alert('Folder name contains invalid characters. Please avoid using < > : " / \\ | ? *');
+        resetFolderCreationState();
+        return false;
+    }
+
+    const currentFolder = files[currentPath[0]] || [];
+    const duplicate = currentFolder.some(item => item.name === trimmedFolderName);
+    if (duplicate) {
+        alert('A folder with this name already exists in the current directory.');
+        resetFolderCreationState();
+        return false;
+    }
+
+    let parentFolderId = null;
+    if (currentPath.length > 1) {
+        const folderName = currentPath[currentPath.length - 1];
+        const folderData = currentFolder.find(f => f.name === folderName);
+        if (folderData && folderData.id) {
+            parentFolderId = folderData.id;
+        }
+    }
+
+    const formData = new FormData();
+    formData.append("name", trimmedFolderName);
+    if (parentFolderId !== null) {
+        formData.append("parent_folder_id", parentFolderId.toString());
+    }
+
+    try {
+        const response = await fetch('https://api.imperfectgamers.org/media/folder/create', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'Authorization': 'eb9fe2c075e77ef69f95276858340813249fefa81cedb86ebb21757d336b8bcb1837200c830fc652e7edc9d3847d7d9f493704f16675c83aa7879613f34537ce'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Network response was not ok.');
+        }
+
+        const data = await response.json();
+        if (data.status === 'success') {
+            const newFolder = {
+                id: data.folder_id,
+                name: trimmedFolderName,
+                size: '1 item',
+                type: 'Folder',
+                modified: new Date().toLocaleString(),
+                icon: 'fa-folder',
+                children: []
             };
+
+            const updatedFiles = { ...files };
+            if (parentFolderId) {
+                const folderIndex = updatedFiles[currentPath[0]].findIndex(f => f.id === parentFolderId);
+                updatedFiles[currentPath[0]][folderIndex].children.push(newFolder);
+            } else {
+                updatedFiles[currentPath[0]].push(newFolder);
+            }
+
+            setFiles(updatedFiles);
+            resetFolderCreationState();
+            return true;  // Indicate success
+        } else {
+            throw new Error(data.message);
+        }
+    } catch (error) {
+        console.error('Failed to create folder:', error);
+        alert(`Failed to create folder: ${error.message}`);
+        return false;  // Indicate failure
+    } finally {
+        setIsCreatingFolderInProgress(false);
+    }
+};
+
+
+    const resetFolderCreationState = () => {
+        setIsCreatingFolderInProgress(false);
+        setIsCreatingFolder(false);
+        setNewFolderName('');
+    };
 
             const handleKeyPress = (event) => {
                 if (event.key === 'Enter') {
                     handleCreateFolder();
                 } else if (event.key === 'Escape') {
-                    setIsCreatingFolder(false);
-                    setNewFolderName('');
+            setIsCreatingFolder(false);
+            setNewFolderName('');
+            setActiveFolder(folder);
+            setSelectedFile(null);
+            setCurrentPath([folder]);
+                    return;
                 }
             };
 
